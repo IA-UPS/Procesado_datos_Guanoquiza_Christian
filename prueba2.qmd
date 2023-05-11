@@ -206,82 +206,52 @@ datos.test.lista <- lapply(datos.lista, function(x) x[-idx,])
 
 cvfit_lasso <- cv.glmnet(as.matrix(datos.train.lista$raw[,-ncol(datos)]),as.numeric(datos.train.lista$raw$clase),type.measure = "class",family="multinom", alpha = 0,nfolds = 4)
 
-
 ```
 
 ```{r}
-X <- scale(X)
-```
-
-```{r}
-fit <- cv.glmnet(X, y = F, alpha = 1, nfolds = 10)
-```
-
-```{r}
-lambda_opt <- fit$lambda.min
-fit2 <- glmnet(X, y, alpha = 1, lambda = lambda_opt)
-y_pred <- predict(fit2, newx = X, type = "response")
-accuracy <- mean(y == (y_pred > 0.5))
-cat("Accuracy:", accuracy)
-```
-
-```{r}
-# quitamos la primera columna
-datos <- read.table("./yeast.data",header = F)[,-1]
-```
-
-```{r}
-min.max.mean <- function(X) apply(X,2,function(x) (x-mean(x))/(max(x)-min(x)))
-min.max.median <- function(X) apply(X,2,function(x) (x-median(x))/(max(x)-min(x)))
-min.max <- function(X) apply(X,2,function(x) (x-min(x))/(max(x)-min(x)))
-zscore <- function(X) apply(X,2,function(x) (x-mean(x))/sd(x))
-l2 <- function(X) apply(X,2,function(x) x/sqrt(sum(x^2))) 
-
-```
-
-```{r}
-datos <- as.data.frame(datos)
-datos.numericos <- datos[, which(unlist(lapply(datos, is.numeric)))]
-clase <- datos$V10 <- as.factor(datos$V10)
-colnames(datos.numericos) <- paste0("Var", rep(1:8))
-### procedemos a crear una lista con todas las transformaciones
-
-datos.lista <- list(
-  raw = bind_cols(datos.numericos,clase=clase),
-  zscore = bind_cols(zscore(datos.numericos),
-                     clase = clase),
-  l2 = bind_cols(l2(datos.numericos), clase = clase),
-  media = bind_cols(min.max.mean(datos.numericos), clase =
-                      clase),
-  mediana = bind_cols(min.max.median(datos.numericos), clase =
-                        clase),
-  min_max = bind_cols(min.max(datos.numericos),
-  clase = clase))
-```
-
-```{r}
+# Regresion logistica de lasso
 set.seed(123456789)
+Dlasso <- function(x) train(clase ~ ., data = x, method = "glmnet", trControl = trControl,tuneGrid = expand.grid(alpha=1,lambda=lambda_seq), trace = F)
 
-X <- as.matrix(datos[, -ncol(datos)])
-y <- as.matrix(datos[, ncol(datos)])
+logistica.lista <- lapply(entrenamiento,Dlasso)
+logisita.pred <- vector("list",length = length(datos.lista))
+for(l in 1:length( datos.lista)){
+  logisita.pred[[l]] <- predict(logistica.lista[[l]],test[[l]])
+}
+names(logisita.pred) <- names(datos.lista)
+accuracy <- vector("numeric",length = length(datos.lista))
+for(l in 1:length(datos.lista)){
+  accuracy[l] <- confusionMatrix(test$raw$clase,logisita.pred[[l]])$overall[1]
+}
+names(accuracy) <- names(datos.lista)
+lassoaccuracy <- accuracy
+print(lassoaccuracy)
 
 ```
 
 ```{r}
+#Regresion logistica de Ridge
 set.seed(123456789)
+Lridge <- function(x) train(clase ~ ., data = x, method = "glmnet", trControl = trControl,tuneGrid = expand.grid(alpha=0,lambda=lambda_seq), trace = F)
 
-index <- createDataPartition(clase, p = 0.7, list = FALSE)
-datos.train <- datos[index, ]
-datos.test <- datos[-index, ]
-
+logistica.lista <- lapply(entrenamiento,Lridge)
+logisita.pred <- vector("list",length = length(datos.lista))
+for(l in 1:length( datos.lista)){
+  logisita.pred[[l]] <- predict(logistica.lista[[l]],test[[l]])
+}
+names(logisita.pred) <- names(datos.lista)
+accuracy <- vector("numeric",length = length(datos.lista))
+for(l in 1:length(datos.lista)){
+  accuracy[l] <- confusionMatrix(test$raw$clase,logisita.pred[[l]])$overall[1]
+}
+names(accuracy) <- names(datos.lista)
+ridgeaccuracy <- accuracy
+print(ridgeaccuracy)
 ```
 
 ```{r}
-X_train <- model.matrix(clase ~ ., data = datos.train)[,-1]
-X_test <- model.matrix(clase ~ ., data = datos.test)[,-1]
-y_train <- datos.train$V10
-y_test <- datos.test$V10
+matriz3d <- matrix(c(accuracy, ridgeaccuracy, lassoaccuracy), nrow = 3, ncol = 5, byrow = TRUE)
 
-set.seed(123456789)
-cvfit <- cv.glmnet(X_train, y_train, alpha = 1, family = "binomial")
+matriz3d
+
 ```
